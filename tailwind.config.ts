@@ -10,26 +10,36 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          50:  '#eff6ff',
-          100: '#dbeafe',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          900: '#1e3a8a',
+          50:  '#eef2ff',
+          100: '#e0e7ff',
+          200: '#c7d2fe',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+          900: '#1e1b4b',
         },
-        earn: {
-          400: '#4ade80',
-          500: '#22c55e',
-          600: '#16a34a',
+        stage: {
+          production: '#f59e0b',
+          post:       '#8b5cf6',
+          review:     '#3b82f6',
+          approved:   '#10b981',
+          published:  '#22c55e',
+          blocked:    '#ef4444',
         },
-        points: {
-          400: '#fbbf24',
-          500: '#f59e0b',
-          600: '#d97706',
+        severity: {
+          warning:  '#f97316',
+          critical: '#dc2626',
         },
       },
       animation: {
         'pulse-slow': 'pulse 3s ease-in-out infinite',
+        'fade-in':    'fadeIn 0.2s ease-in',
+      },
+      keyframes: {
+        fadeIn: {
+          from: { opacity: '0', transform: 'translateY(4px)' },
+          to:   { opacity: '1', transform: 'translateY(0)' },
+        },
       },
     },
   },
