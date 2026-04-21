@@ -26,6 +26,7 @@ export default function NewProjectPage() {
     if (!res.ok) {
       setError(data.error ?? 'Failed to create project.')
     } else {
+      router.refresh()
       router.push(`/projects/${data.id}`)
     }
   }
