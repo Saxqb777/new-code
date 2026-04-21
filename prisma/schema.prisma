@@ -1,0 +1,362 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum GlobalRole {
+  AGENCY_ADMIN
+  USER
+}
+
+enum ProjectRole {
+  PROJECT_MANAGER
+  SHOOTER
+  EDITOR
+  CLIENT
+}
+
+enum ProjectStatus {
+  DRAFT
+  IN_PRODUCTION
+  IN_POST
+  IN_REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum AssetType {
+  RAW_FOOTAGE
+  EDIT_DRAFT
+  FINAL_EDIT
+  THUMBNAIL
+  SUPPORTING
+}
+
+enum AssetStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  REJECTED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+enum NotificationType {
+  FOOTAGE_UPLOADED
+  EDIT_READY
+  REVIEW_APPROVED
+  REVIEW_CHANGES
+  MILESTONE_DUE
+  MILESTONE_COMPLETED
+  MEMBER_ADDED
+  COMMENT_ADDED
+}
+
+enum SocialPlatform {
+  YOUTUBE
+  INSTAGRAM
+  TIKTOK
+}
+
+// ─── Users & Auth ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  name          String
+  avatarUrl     String?
+  passwordHash  String?
+  globalRole    GlobalRole @default(USER)
+  emailVerified DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  accounts           Account[]
+  sessions           Session[]
+  projectMembers     ProjectMember[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  assignedMilestones Milestone[]    @relation("MilestoneAssignee")
+  uploadedVersions   AssetVersion[]
+  reviewComments     ReviewComment[]
+  reviews            Review[]
+  sentInvites        Invite[]
+
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Invite {
+  id          String      @id @default(cuid())
+  email       String
+  token       String      @unique @default(cuid())
+  globalRole  GlobalRole  @default(USER)
+  projectId   String?
+  projectRole ProjectRole?
+  invitedById String
+  acceptedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime    @default(now())
+
+  invitedBy User @relation(fields: [invitedById], references: [id])
+
+  @@index([token])
+  @@index([email])
+}
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+
+model Project {
+  id          String        @id @default(cuid())
+  title       String
+  description String?       @db.Text
+  status      ProjectStatus @default(DRAFT)
+  dueDate     DateTime?
+  clientName  String?
+  coverUrl    String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+
+  members    ProjectMember[]
+  milestones Milestone[]
+  assets     Asset[]
+  reviews    Review[]
+  analytics  ProjectAnalytics[]
+  auditLogs  AuditLog[]
+
+  @@index([status])
+}
+
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole
+  joinedAt  DateTime    @default(now())
+  removedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId, role])
+  @@index([userId])
+  @@index([projectId])
+}
+
+// ─── Milestones ───────────────────────────────────────────────────────────────
+
+model Milestone {
+  id          String          @id @default(cuid())
+  projectId   String
+  title       String
+  description String?         @db.Text
+  status      MilestoneStatus @default(PENDING)
+  assigneeId  String?
+  dueDate     DateTime?
+  completedAt DateTime?
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User?   @relation("MilestoneAssignee", fields: [assigneeId], references: [id])
+
+  @@index([projectId, status])
+}
+
+// ─── Assets & Versions ────────────────────────────────────────────────────────
+
+model Asset {
+  id               String      @id @default(cuid())
+  projectId        String
+  type             AssetType
+  title            String
+  status           AssetStatus @default(UPLOADING)
+  currentVersionId String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  project  Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions AssetVersion[]
+  reviews  Review[]
+
+  @@index([projectId, type])
+}
+
+model AssetVersion {
+  id            String   @id @default(cuid())
+  assetId       String
+  versionNumber Int
+  s3Key         String
+  s3Bucket      String
+  fileSizeBytes BigInt
+  durationMs    Int?
+  mimeType      String
+  uploadedById  String
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  asset      Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation(fields: [uploadedById], references: [id])
+
+  @@unique([assetId, versionNumber])
+  @@index([assetId])
+}
+
+// ─── Reviews & Comments ───────────────────────────────────────────────────────
+
+model Review {
+  id          String       @id @default(cuid())
+  projectId   String
+  assetId     String
+  status      ReviewStatus @default(PENDING)
+  reviewerId  String?
+  requestedAt DateTime     @default(now())
+  decidedAt   DateTime?
+  notes       String?      @db.Text
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  asset    Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  reviewer User?           @relation(fields: [reviewerId], references: [id])
+  comments ReviewComment[]
+
+  @@index([projectId, status])
+  @@index([assetId])
+}
+
+model ReviewComment {
+  id          String   @id @default(cuid())
+  reviewId    String
+  authorId    String
+  body        String   @db.Text
+  startTimeMs Int?
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([reviewId])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  linkUrl   String?
+  readAt    DateTime?
+  payload   Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+}
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+
+model ProjectAnalytics {
+  id            String         @id @default(cuid())
+  projectId     String
+  platform      SocialPlatform
+  externalId    String
+  externalUrl   String
+  publishedAt   DateTime?
+  viewCount     BigInt         @default(0)
+  likeCount     BigInt         @default(0)
+  commentCount  BigInt         @default(0)
+  shareCount    BigInt         @default(0)
+  lastFetchedAt DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, platform, externalId])
+  @@index([projectId])
+}
+
+// ─── Audit Trail ──────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  projectId  String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  actor   User?    @relation(fields: [actorId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([projectId])
+}
