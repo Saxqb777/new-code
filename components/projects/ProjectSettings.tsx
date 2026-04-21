@@ -180,6 +180,42 @@ export default function ProjectSettings({ projectId, project: initial, members: 
           </div>
         </div>
       </div>
+
+      {/* Danger zone */}
+      <DangerZone projectId={projectId} projectTitle={form.title} />
+    </div>
+  )
+}
+
+function DangerZone({ projectId, projectTitle }: { projectId: string; projectTitle: string }) {
+  const router = useRouter()
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    if (!confirm(`Delete "${projectTitle}"? This cannot be undone.`)) return
+    setDeleting(true)
+    const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' })
+    if (res.ok) {
+      router.refresh()
+      router.push('/projects')
+    } else {
+      setDeleting(false)
+      alert('Failed to delete project. Only admins can delete projects.')
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-red-200 p-5">
+      <h3 className="font-semibold text-red-700 mb-1">Danger zone</h3>
+      <p className="text-sm text-slate-500 mb-4">Deleting a project is permanent and cannot be undone.</p>
+      <button
+        onClick={handleDelete}
+        disabled={deleting}
+        className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+      >
+        <Trash2 size={15} />
+        {deleting ? 'Deleting…' : 'Delete project'}
+      </button>
     </div>
   )
 }
